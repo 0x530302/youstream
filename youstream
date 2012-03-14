@@ -35,52 +35,78 @@
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # ToDo: examine if the url is already a youtube video
-# ToDo: multiple urls as parameter
+# ToDo: better url searching
 
 # Command of your Video Player
-COMMAND="mplayer"
+COMMAND="mplayer -really-quiet"
 
 # Wait until PERCENTAGE percent of the video is downloaded
 PERCENTAGE=5
 
+bashtrap() {
+	echo
+    echo "CTRL+C Detected!"
+	echo "Tidying up..."
+	if [[ -n $pid ]]; then
+		kill $pid
+	fi
+	if [[ -n $tmp ]]; then
+		rm $tmp
+	fi
+	exit 1
+}
+trap bashtrap INT
+
 if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
-	links=$(curl -s $1 | grep 'youtube.com' | grep  'http://[^"]' | sed -e 's/.*"http:\/\//http:\/\//' -e 's/".*//g')
+	for i in $(seq 1 $#); do
+		echo "Process ${!i}"
+		links=$(curl -s ${!i} | grep 'youtube.com' | grep  'http://[^"]' | sed -e 's/.*"http:\/\//http:\/\//' -e 's/".*//g')
 
-	for i in $links; do
-		echo "Found Video: $i"
-		youtube-dl -q -F $i
-		echo -n "Choose format: "
-		read format
+		for vid in $links; do
+			echo "Found Video: $vid"
+			youtube-dl -q -F $vid
+			echo -n "Choose format: "
+			read format foo
 
-		tmp=$(mktemp)
-		size=$(curl -s -I $(youtube-dl -q -g -f $format $i) | grep -e "Content-Length:" | sed -e "s/.*: //g" -e 's/[^0-9]*//g')
-		youtube-dl -q --no-part -f $format -o $tmp $i &
-		pid=$!
+			tmp=$(mktemp)
+			size=$(curl -s -I $(youtube-dl -q -g -f $format $vid) | grep -e "Content-Length:" | sed -e "s/.*: //g" -e 's/[^0-9]*//g')
+			youtube-dl -q --no-part -f $format -o $tmp $vid &
+			pid=$!
 
-		replay=1
-		while [ $replay -eq 1 ]; do
-			echo -n "Wait for Video to stream"
-			while [ $(( ($(stat -c %s $tmp) * 100) / $size)) -lt $PERCENTAGE ]; do
-				echo -n "."
-				sleep 1
+			replay=1
+			while [ $replay -eq 1 ]; do
+				echo -n "Wait for Video to stream"
+				while [ $(( ($(stat -c %s $tmp) * 100) / $size)) -lt $PERCENTAGE ]; do
+					echo -n "."
+					sleep 1
+				done
+				echo
+
+				$COMMAND $tmp
+				echo -n "Replay video ? [Y/n] "
+				read answer foo
+				case "$answer" in
+					[Nn])
+						replay=0 ;;
+					*)
+						replay=1 ;;
+				esac
 			done
-			echo
-
-			$COMMAND $tmp
-			echo -n "Replay video ? [Y/n] "
-			read -sn1 answer
+			
+			echo -n "Delete video ? [Y/n] "
+			read answer foo
 			case "$answer" in
 				[Nn])
-					replay=0 ;;
+					echo "Video is saved in $tmp" ;;
 				*)
-					replay=1 ;;
+					# remove junk
+					kill $pid
+					rm $tmp
+					;;
 			esac
 		done
-		
-		# remove junk
-		kill $pid
-		rm $tmp
 	done
+	echo
 else
 	echo "Usage: $0 url [url...]"
 	exit 1
