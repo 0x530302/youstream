@@ -34,7 +34,6 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# ToDo: examine if the url is already a youtube video
 # ToDo: better url searching
 
 # Command of your Video Player
@@ -60,37 +59,51 @@ trap bashtrap INT
 if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
 	for i in $(seq 1 $#); do
 		echo "Process ${!i}"
-		links=$(curl -s ${!i} | grep 'youtube.com' | grep  'http://[^"]' | sed -e 's/.*"http:\/\//http:\/\//' -e 's/".*//g')
+		
+		# is a youtube link?
+		youtube-dl -q -g ${!i} 2> /dev/null 1> /dev/null
+		if [[ $? -ne 0 ]]; then
+			links=$(curl -s ${!i} | grep 'youtube.com' | grep  'https\?://[^"]' | sed -e 'sn.*"\(https\?://\)n\1ng' -e 's/".*//g')
+		else
+			links=${!i}
+		fi
 
 		for vid in $links; do
 			echo "Found Video: $vid"
 			youtube-dl -q -F $vid
+			if [[ $? -ne 0 ]]; then 
+				continue
+			fi
 			echo -n "Choose format: "
 			read format foo
 
 			tmp=$(mktemp)
-			size=$(curl -s -I $(youtube-dl -q -g -f $format $vid) | grep -e "Content-Length:" | sed -e "s/.*: //g" -e 's/[^0-9]*//g')
+			size=$(curl -s -I $(youtube-dl -q -g -f $format $vid) | grep -e "Content-Length:" | sed  -e 's/[^0-9]*//g')
 			youtube-dl -q --no-part -f $format -o $tmp $vid &
 			pid=$!
 
 			replay=1
 			while [ $replay -eq 1 ]; do
+				if [[ -f $tmp ]]; then
 				echo -n "Wait for Video to stream"
-				while [ $(( ($(stat -c %s $tmp) * 100) / $size)) -lt $PERCENTAGE ]; do
-					echo -n "."
-					sleep 1
-				done
-				echo
+					while [ $(( ($(stat -c %s $tmp) * 100) / $size)) -lt $PERCENTAGE ]; do
+						echo -n "."
+						sleep 1
+					done
+					echo
 
-				$COMMAND $tmp
-				echo -n "Replay video ? [Y/n] "
-				read answer foo
-				case "$answer" in
-					[Nn])
-						replay=0 ;;
-					*)
-						replay=1 ;;
-				esac
+					$COMMAND $tmp
+					echo -n "Replay video ? [Y/n] "
+					read answer foo
+					case "$answer" in
+						[Nn])
+							replay=0 ;;
+						*)
+							replay=1 ;;
+					esac
+				else
+					sleep 1
+				fi
 			done
 			
 			echo -n "Delete video ? [Y/n] "
