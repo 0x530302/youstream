@@ -34,7 +34,6 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# ToDo: wait for percentage of video
 # ToDo: examine if the url is already a youtube video
 # ToDo: multiple urls as parameter
 
@@ -42,24 +41,32 @@
 COMMAND="mplayer"
 
 # Wait until PERCENTAGE percent of the video is downloaded
-#PERCENTAGE=5
+PERCENTAGE=5
 
 if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
 	links=$(curl -s $1 | grep 'youtube.com' | grep  'http://[^"]' | sed -e 's/.*"http:\/\//http:\/\//' -e 's/".*//g')
 
 	for i in $links; do
+		echo "Found Video: $i"
 		youtube-dl -q -F $i
 		echo -n "Choose format: "
 		read format
 
 		tmp=$(mktemp)
-		#size=$(curl -I $(youtube-dl -q -g -f $format $i) | grep -e "Content-Length:" | sed -e "s/.*: //g")
+		size=$(curl -s -I $(youtube-dl -q -g -f $format $i) | grep -e "Content-Length:" | sed -e "s/.*: //g" -e 's/[^0-9]*//g')
 		youtube-dl -q --no-part -f $format -o $tmp $i &
 		pid=$!
 
 		replay=1
 		while [ $replay -eq 1 ]; do
-			mplayer $tmp
+			echo -n "Wait for Video to stream"
+			while [ $(( ($(stat -c %s $tmp) * 100) / $size)) -lt $PERCENTAGE ]; do
+				echo -n "."
+				sleep 1
+			done
+			echo
+
+			$COMMAND $tmp
 			echo -n "Replay video ? [Y/n] "
 			read -sn1 answer
 			case "$answer" in
@@ -70,9 +77,6 @@ if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
 			esac
 		done
 		
-		echo $?
-		echo $tmp
-
 		# remove junk
 		kill $pid
 		rm $tmp
