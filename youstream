@@ -40,18 +40,21 @@
 COMMAND="mplayer -really-quiet"
 
 # Wait until PERCENTAGE percent of the video is downloaded
-PERCENTAGE=5
+PERCENTAGE=10
 
-bashtrap() {
-	echo
-    echo "CTRL+C Detected!"
-	echo "Tidying up..."
-	if [[ -n $pid ]]; then
+tidy_up() {
+	if [[ -n $pid && $(ps -p${pid} | wc -l) -eq 2 ]]; then
 		kill $pid
 	fi
 	if [[ -n $tmp ]]; then
 		rm $tmp
 	fi
+}
+bashtrap() {
+	echo
+    echo "CTRL+C Detected!"
+	echo "Tidying up..."
+	tidy_up
 	exit 1
 }
 trap bashtrap INT
@@ -93,13 +96,13 @@ if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
 					echo
 
 					$COMMAND $tmp
-					echo -n "Replay video ? [Y/n] "
+					echo -n "Replay video ? [y/N] "
 					read answer foo
 					case "$answer" in
-						[Nn])
-							replay=0 ;;
-						*)
+						[YyJj])
 							replay=1 ;;
+						*)
+							replay=0 ;;
 					esac
 				else
 					sleep 1
@@ -112,9 +115,7 @@ if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
 				[Nn])
 					echo "Video is saved in $tmp" ;;
 				*)
-					# remove junk
-					kill $pid
-					rm $tmp
+					tidy_up
 					;;
 			esac
 		done
