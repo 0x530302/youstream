@@ -34,15 +34,13 @@
 # OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# ToDo: better url searching
-
 # Command of your Video Player
-COMMAND="mplayer -really-quiet"
+COMMAND="vlc --play-and-pause --quiet"
 
 # Wait until PERCENTAGE percent of the video is downloaded
 PERCENTAGE=10
 
-tidy_up() {
+function tidy_up() {
 	if [[ -n $pid && $(ps -p${pid} | wc -l) -eq 2 ]]; then
 		kill $pid
 	fi
@@ -50,17 +48,62 @@ tidy_up() {
 		rm $tmp
 	fi
 }
-bashtrap() {
+function bashtrap() {
 	echo
-    echo "CTRL+C Detected!"
 	echo "Tidying up..."
 	tidy_up
 	exit 1
 }
 trap bashtrap INT
+function print_usage() {
+	echo Usage: $0 [options] url [url...] 1>&2
+}
+function print_help() {
+	print_usage
+cat <<EOF 1>&2
 
-if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
+Options:
+   -h, --help               print this help text and exit
+   -v, --version            print program version and exit
+   -f, --format FORMAT      video format code
+EOF
+}
+function print_version() {
+	echo youstream 2012-04-11 1>&2
+}
+function progress_bar() {
+	WIDTH=$(($(tput cols) - 8))
+	echo -ne "\r[" 1>&2
+	for i in $(seq 1 $(($WIDTH*$1/100))); do
+		echo -n "=" 1>&2
+	done
+	if [[ $(($WIDTH*$1/100)) -ne $(($WIDTH)) ]]; then
+		for i in $(seq $(($WIDTH*$1/100)) $(($WIDTH))); do
+			echo -n " " 1>&2
+		done
+	fi
+	printf "] %3d%%\033[5D" $1 1>&2
+}
+
+if [[ $1 = "--help" || $1 = "-h" ]]; then
+	print_help
+	exit 0
+fi
+
+if [[ $1 = "--version" || $1 = "-v" ]]; then
+	print_version
+	exit 0
+fi
+
+if [[ $1 = "--format" || $1 = "-f" ]]; then
+	FORMAT=$2
+fi
+
+if [[ -n $1 ]]; then
 	for i in $(seq 1 $#); do
+		if [[ ${!i:0:1} = "-" ]]; then
+			continue
+		fi
 		echo "Process ${!i}"
 		
 		# is a youtube link?
@@ -73,37 +116,42 @@ if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
 
 		for vid in $links; do
 			echo "Found Video: $vid"
-			youtube-dl -q -F $vid
-			if [[ $? -ne 0 ]]; then 
-				continue
+			if [[ -z $FORMAT ]]; then
+				youtube-dl -q -F $vid
+				if [[ $? -ne 0 ]]; then 
+					continue
+				fi
+				echo -n "Choose format: "
+				read format foo
+			else
+				format=$FORMAT
 			fi
-			echo -n "Choose format: "
-			read format foo
 
 			tmp=$(mktemp)
 			size=$(curl -s -I $(youtube-dl -q -g -f $format $vid) | grep -e "Content-Length:" | sed  -e 's/[^0-9]*//g')
+			echo "Link: $(curl -s -I $(youtube-dl -q -g -f $format $vid))"
+			echo "Size: $size"
 			youtube-dl -q --no-part -f $format -o $tmp $vid &
 			pid=$!
 
-			replay=1
-			while [ $replay -eq 1 ]; do
+			started=0
+			while [ true ]; do
 				if [[ -f $tmp ]]; then
-				echo -n "Wait for Video to stream"
+					echo "Streaming video..."
 					while [ $(( ($(stat -c %s $tmp) * 100) / $size)) -lt $PERCENTAGE ]; do
-						echo -n "."
+						progress_bar $(( ($(stat -c %s $tmp) * 100) / $size))
+						sleep 1
+					done
+					if [[ $started -eq 0 ]]; then
+						started=1
+						$COMMAND $tmp 1>/dev/null 2>/dev/null &
+					fi
+					while [ $(( ($(stat -c %s $tmp) * 100) / $size)) -lt 100 ]; do
+						progress_bar $(( ($(stat -c %s $tmp) * 100) / $size))
 						sleep 1
 					done
 					echo
-
-					$COMMAND $tmp
-					echo -n "Replay video ? [y/N] "
-					read answer foo
-					case "$answer" in
-						[YyJj])
-							replay=1 ;;
-						*)
-							replay=0 ;;
-					esac
+					break
 				else
 					sleep 1
 				fi
@@ -122,6 +170,6 @@ if [[ -n $1  &&  $1 != "-h"  &&  $1 != "--help" ]]; then
 	done
 	echo
 else
-	echo "Usage: $0 url [url...]"
+	print_usage
 	exit 1
 fi
