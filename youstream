@@ -35,7 +35,7 @@
 # IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Command of your Video Player
-COMMAND="vlc --play-and-pause --quiet"
+COMMAND="vlc --play-and-pause --quiet --qt-minimal-view"
 
 # Wait until PERCENTAGE percent of the video is downloaded
 PERCENTAGE=10
@@ -69,7 +69,7 @@ Options:
 EOF
 }
 function print_version() {
-	echo youstream 2012-04-11 1>&2
+	echo "youstream r6_2012-04-19" 1>	echo "youstream r5_2012-04-19"2
 }
 function progress_bar() {
 	WIDTH=$(($(tput cols) - 8))
@@ -85,19 +85,37 @@ function progress_bar() {
 	printf "] %3d%%\033[5D" $1 1>&2
 }
 
-if [[ $1 = "--help" || $1 = "-h" ]]; then
-	print_help
-	exit 0
-fi
-
-if [[ $1 = "--version" || $1 = "-v" ]]; then
-	print_version
-	exit 0
-fi
-
-if [[ $1 = "--format" || $1 = "-f" ]]; then
-	FORMAT=$2
-fi
+for arg; do
+    delim=""
+    case "$arg" in
+       --help) args="${args}-h ";;
+       --version) args="${args}-v ";;
+       --format) args="${args}-f ";;
+       #pass through anything else
+       *) [[ "${arg:0:1}" == "-" ]] || delim="\""
+           args="${args}${delim}${arg}${delim} ";;
+    esac
+done
+ 
+eval set -- $args
+ 
+while getopts ":f:hv" option 2>/dev/null
+do
+    case $option in
+        h)
+			print_help
+			exit 0
+			;;
+        v)
+			print_version
+			exit 0
+			;;
+        f)
+			FORMAT=${OPTARG[@]};;
+        *) echo $OPTARG is an unrecognized option;;
+    esac
+done
+shift $(($OPTIND - 1))
 
 if [[ -n $1 ]]; then
 	for i in $(seq 1 $#); do
@@ -127,7 +145,7 @@ if [[ -n $1 ]]; then
 				format=$FORMAT
 			fi
 
-			tmp=$(mktemp)
+			tmp=$(mktemp youstream.XXXXXXXXXX)
 			size=$(curl -s -I $(youtube-dl -q -g -f $format $vid) | grep -e "Content-Length:" | sed  -e 's/[^0-9]*//g')
 			echo "Link: $(curl -s -I $(youtube-dl -q -g -f $format $vid))"
 			echo "Size: $size"
