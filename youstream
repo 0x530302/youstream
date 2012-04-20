@@ -40,6 +40,8 @@ COMMAND="vlc --play-and-pause --quiet --qt-minimal-view"
 # Wait until PERCENTAGE percent of the video is downloaded
 PERCENTAGE=10
 
+DEBUG=1
+
 function tidy_up() {
 	if [[ -n $pid && $(ps -p${pid} | wc -l) -eq 2 ]]; then
 		kill $pid
@@ -69,7 +71,7 @@ Options:
 EOF
 }
 function print_version() {
-	echo "youstream r7_2012-04-20" 1>&2
+	echo "youstream r8_2012-04-20" 1>&2
 }
 function progress_bar() {
 	WIDTH=$(($(tput cols) - 8))
@@ -145,10 +147,11 @@ if [[ -n $1 ]]; then
 				format=$FORMAT
 			fi
 
-			tmp=$(mktemp youstream.XXXXXXXXXX)
-			size=$(curl -s -I $(youtube-dl -q -g -f $format $vid) | grep -e "Content-Length:" | sed  -e 's/[^0-9]*//g')
-			echo "Link: $(curl -s -I $(youtube-dl -q -g -f $format $vid))"
-			echo "Size: $size"
+			if [[ -z $TMP ]]; then
+				TMP="/tmp"
+			fi
+			tmp=$(mktemp --tmpdir=$TMPDIR youstream.XXXXXXXXXX)
+			size=$(curl -s -I $(youtube-dl -q -g -f $format $vid) | grep -e "Content-Length:" | sed  -e 's/[^0-9]//g')
 			youtube-dl -q --no-part -f $format -o $tmp $vid &
 			pid=$!
 
@@ -181,8 +184,7 @@ if [[ -n $1 ]]; then
 				[Nn])
 					echo "Video is saved in $tmp" ;;
 				*)
-					tidy_up
-					;;
+					tidy_up ;;
 			esac
 		done
 	done
