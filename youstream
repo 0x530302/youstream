@@ -69,7 +69,7 @@ Options:
 EOF
 }
 function print_version() {
-	echo "youstream r6_2012-04-19" 1>	echo "youstream r5_2012-04-19"2
+	echo "youstream r7_2012-04-20" 1>&2
 }
 function progress_bar() {
 	WIDTH=$(($(tput cols) - 8))
